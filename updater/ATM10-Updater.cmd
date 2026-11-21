@@ -72,19 +72,21 @@ function Resolve-Instance {
     if ($env:ATM10_INSTANCE) { return $env:ATM10_INSTANCE }
     $saved = Get-SavedInstance
     if (Test-Instance $saved) { return $saved }
-    $candidates = Find-Candidates
+    $candidates = @(Find-Candidates)
     $chosen = switch ($candidates.Count) {
         0 { Write-Note 'Could not find ATM10 in the default CurseForge folder.'; Select-WithDialog }
         1 { $candidates[0] }
         default { Select-FromList $candidates }
     }
+    if (-not (Test-Instance $chosen)) { throw "Not a valid ATM10 instance folder: $chosen" }
     Save-Instance $chosen
     $chosen
 }
 
 function Assert-GameClosed([string]$Instance) {
+    $instancePattern = [regex]::Escape($Instance.TrimEnd('\')) + '(\\|"|\s|$)'
     $running = Get-CimInstance Win32_Process -Filter "Name = 'javaw.exe' OR Name = 'java.exe'" |
-        Where-Object { $_.CommandLine -and $_.CommandLine.Contains($Instance) }
+        Where-Object { $_.CommandLine -and $_.CommandLine -match $instancePattern }
     if ($running) { throw 'Minecraft is running from this instance. Close the game and run the updater again.' }
 }
 

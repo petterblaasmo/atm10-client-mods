@@ -69,6 +69,8 @@ $env:ATM10_MANIFEST_URL = "file:///$($T -replace '\\','/')/manifest.json"   # om
 "`n" | cmd /c updater\ATM10-Updater.cmd; "exit=$LASTEXITCODE"
 ```
 
+Also test auto-discovery without `ATM10_INSTANCE`: point `$env:USERPROFILE` and `$env:APPDATA` at a temp folder containing `curseforge\minecraft\Instances\All the Mods 10\` with exactly one instance, then with two. PowerShell unrolls one-element arrays returned from functions; wrap such calls in `@(...)`.
+
 Cover at least: fresh install, a second run that changes nothing, an old version replaced, a stale managed file removed, an unrelated jar kept, a checksum mismatch (exit 1, no file left), an unsafe path refused (exit 1).
 
 ## Conventions
