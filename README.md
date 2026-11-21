@@ -16,8 +16,8 @@ If Windows SmartScreen warns about the file, choose **More info → Run anyway**
 On the server, after changing mods:
 
 ```bash
-cd ~/atm10-client-updater/publisher
-sudo python3 publish.py --updater ../updater/ATM10-Updater.cmd
+cd ~/atm10-client-updater && git pull -q && cd publisher
+python3 publish.py --updater ../updater/ATM10-Updater.cmd
 ```
 
 `client-mods.json` lists which server jars players need. Use `{"pattern": "...", "curseforge": "<slug>"}` for third-party mods that must not be re-hosted; mods found on Modrinth are linked automatically. `--dry-run` prints the manifest without publishing.
