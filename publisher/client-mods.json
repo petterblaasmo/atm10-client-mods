@@ -1,0 +1,12 @@
+{
+  "repo": "petterblaasmo/atm10-client-mods",
+  "serverDir": "/opt/minecraft/atm10",
+  "minecraft": "1.21.1",
+  "pack": "All the Mods 10 8.6",
+  "include": [
+    "atm10-ae2types-*.jar",
+    "terranium-*.jar",
+    { "pattern": "swem-*.jar", "curseforge": "swem" },
+    "ae2tooltipfix-*.jar"
+  ]
+}
