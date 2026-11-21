@@ -86,7 +86,15 @@ def modrinth_url(sha1, filename):
     return None
 
 
-def build_manifest(config, tag):
+def updater_entry(config, tag, updater_path):
+    if not updater_path:
+        return None
+    _, sha256 = hash_file(updater_path)
+    name = Path(updater_path).name
+    return {"url": f"https://github.com/{config['repo']}/releases/download/{tag}/{name}", "sha256": sha256}
+
+
+def build_manifest(config, tag, updater_path=None):
     entries, uploads = [], []
     for jar, pattern, curseforge_slug in select_jars(Path(config["serverDir"]) / "mods", config["include"]):
         sha1, sha256 = hash_file(jar)
@@ -108,6 +116,9 @@ def build_manifest(config, tag):
         "pack": config.get("pack", ""),
         "files": entries,
     }
+    updater = updater_entry(config, tag, updater_path)
+    if updater:
+        manifest["updater"] = updater
     return manifest, uploads
 
 
@@ -120,8 +131,9 @@ def previous_manifest(repo):
 
 
 def same_files(a, b):
-    key = lambda m: sorted((f["path"], f["sha256"]) for f in m["files"])
-    return a is not None and key(a) == key(b)
+    files = lambda m: sorted((f["path"], f["sha256"]) for f in m["files"])
+    updater = lambda m: (m.get("updater") or {}).get("sha256")
+    return a is not None and files(a) == files(b) and updater(a) == updater(b)
 
 
 def publish(config, manifest, uploads, updater_path):
@@ -149,7 +161,7 @@ def main():
 
     config = load_config(args.config)
     tag = time.strftime("v%Y.%m.%d-%H%M%S", time.gmtime())
-    manifest, uploads = build_manifest(config, tag)
+    manifest, uploads = build_manifest(config, tag, args.updater)
     print(json.dumps(manifest, indent=2))
     print(f"uploading {len(uploads)} own jar(s): {[u.name for u in uploads]}", file=sys.stderr)
     if args.dry_run:

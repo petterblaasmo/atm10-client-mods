@@ -4,12 +4,14 @@ Extra client mods for our All the Mods 10 server, on top of the CurseForge pack.
 
 ## Players
 
-1. Download **[ATM10-Updater.cmd](https://github.com/petterblaasmo/atm10-client-mods/releases/latest/download/ATM10-Updater.cmd)** once.
-2. Close Minecraft and double-click it whenever the server announces an update, then press Play in CurseForge.
+1. Download **[ATM10-Updater.cmd](https://github.com/petterblaasmo/atm10-client-mods/releases/latest/download/ATM10-Updater.cmd)** once and double-click it.
+2. Answer **Y** when it asks to keep the mods updated automatically. That's it.
 
-The updater finds your ATM10 instance, installs or updates the server's extra mods, verifies every download, and removes old versions it installed. It never touches the rest of your pack.
+From then on it runs invisibly at sign-in and every 30 minutes, updates itself, and shows a Windows notification when mods were updated. If Minecraft is open when an update arrives, you get one notification asking you to close the game; it installs as soon as the game is closed.
 
-If Windows SmartScreen warns about the file, choose **More info → Run anyway**.
+The updater finds your ATM10 instance, verifies every download, and removes old versions it installed. It never touches the rest of your pack. If Windows SmartScreen warns about the file, choose **More info → Run anyway**.
+
+To turn automatic updates off: `schtasks /Delete /TN "ATM10 Updater" /F`. Logs: `%LOCALAPPDATA%\ATM10-Updater\updater.log`.
 
 ## Admins
 
