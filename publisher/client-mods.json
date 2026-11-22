@@ -7,6 +7,7 @@
     "atm10-ae2types-*.jar",
     "terranium-*.jar",
     { "pattern": "swem-*.jar", "curseforge": "swem" },
-    "ae2tooltipfix-*.jar"
+    "ae2tooltipfix-*.jar",
+    "atm10-ae2-tweaks-*.jar"
   ]
 }
