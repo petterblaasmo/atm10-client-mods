@@ -124,6 +124,12 @@ function Resolve-Instance([hashtable]$Settings) {
 }
 
 function Test-GameRunning([string]$Instance) {
+    # Sodium rewrites the game's command line on Windows, so the instance path is often not visible there.
+    # The running game keeps logs\latest.log open, which makes an exclusive open fail.
+    $log = Join-Path $Instance 'logs\latest.log'
+    if (Test-Path -LiteralPath $log) {
+        try { [IO.File]::Open($log, 'Open', 'Read', 'None').Dispose() } catch [System.IO.IOException] { return $true }
+    }
     $instancePattern = [regex]::Escape($Instance.TrimEnd('\')) + '(\\|"|\s|$)'
     [bool](Get-CimInstance Win32_Process -Filter "Name = 'javaw.exe' OR Name = 'java.exe'" |
         Where-Object { $_.CommandLine -and $_.CommandLine -match $instancePattern })
