@@ -9,12 +9,15 @@ Players use the **CurseForge app** with the official **All the Mods 10** pack. O
 | Part | Runs on | Role |
 |---|---|---|
 | `updater/ATM10-Updater.cmd` | Players' Windows PCs | One double-click: finds the ATM10 instance, syncs extra mods from the latest release manifest |
+| `updater/atm10-updater.sh` | Players' Macs | Same behaviour, run once with `bash <(curl -fsSL .../atm10-updater.sh)` in Terminal |
 | `publisher/publish.py` | The game server | Builds `manifest.json` from server jars and creates a GitHub release |
 | `publisher/client-mods.json` | The game server | Which server jars players need, and where each is downloaded from |
 
 Players fetch `https://github.com/petterblaasmo/atm10-client-mods/releases/latest/download/manifest.json`. The release marked **Latest** is what every player gets, so a release is a production deploy: players with automatic updates install it within 30 minutes, without any action.
 
 Automatic updates: on the first interactive run the updater copies itself to `%LOCALAPPDATA%\ATM10-Updater\ATM10-Updater.ps1` and registers the per-user scheduled task `ATM10 Updater` (at logon + every 30 min, `conhost.exe --headless ... -Background`). Background runs never prompt, log to `updater.log` there, show Windows toast notifications, and self-update by comparing the installed script with `manifest.updater.sha256`. Player settings live in `%APPDATA%\ATM10-Updater\settings.json` (`instance`, `autoUpdate`, `notifiedVersion`).
+
+The Mac updater mirrors this: it installs itself to `~/Library/Application Support/ATM10-Updater/atm10-updater.sh` with settings in `settings` next to it, registers the LaunchAgent `com.github.petterblaasmo.atm10-updater` (at login + every 30 min, `--background`), logs to `~/Library/Logs/ATM10-Updater.log`, and self-updates from `manifest.macUpdater`. Instances are found in `~/Documents/curseforge/minecraft/Instances`.
 
 ## Server facts
 
@@ -28,11 +31,11 @@ Automatic updates: on the first interactive run the updater copies itself to `%L
 ssh atm10
 cd ~/atm10-client-updater && git pull -q && cd publisher
 python3 publish.py --dry-run                                  # review the manifest first
-python3 publish.py --updater ../updater/ATM10-Updater.cmd     # publish
+python3 publish.py --updater ../updater/ATM10-Updater.cmd --mac-updater ../updater/atm10-updater.sh   # publish
 ```
 
 - The script exits without publishing when nothing changed; `--force` overrides that.
-- Always attach `--updater` so the latest release keeps the player download link working.
+- Always attach `--updater` and `--mac-updater` so the latest release keeps both player download links working.
 - Tell the owner the new tag. Players must close the game and run the updater.
 
 ## Adding or removing a client mod
@@ -55,10 +58,11 @@ Keep these invariants; each one prevents breaking players' installs:
 - Download to a temp file, verify sha256, then move into place. A failed download must leave no partial jar.
 - Refuse to run while Minecraft runs from that instance.
 - Must work on stock **Windows PowerShell 5.1**: no `??`, `?.`, ternaries or `&&`; use `-UseBasicParsing`.
-- The file must keep **CRLF** line endings (`.gitattributes` enforces it); the first lines are a batch/PowerShell polyglot.
+- The Mac updater must keep these invariants too, and run on stock macOS: **bash 3.2** (no associative arrays, `mapfile`, or `set -u` with empty arrays) and only built-in tools (`curl`, `shasum`, `osascript`, `launchctl`; JSON is parsed with JavaScript for Automation). It keeps **LF** line endings.
+- The `.cmd` file must keep **CRLF** line endings (`.gitattributes` enforces it); the first lines are a batch/PowerShell polyglot.
 - A broken updater release reaches every background install automatically. Test background mode (`-File <copy>.ps1 -Background`) before publishing, and remember that only a working updater can fix itself.
 - Background mode must never prompt or block; interactive-only steps go through `Initialize-AutoUpdate`.
-- Changing the manifest format means bumping `schema` in both files. Old updaters then tell players to download the new one, so publish with `--updater` in the same release.
+- Changing the manifest format means bumping `schema` in both files. Old updaters then tell players to download the new one, so publish with `--updater` and `--mac-updater` in the same release.
 
 ## Testing the updater
 
@@ -71,6 +75,14 @@ New-Item -ItemType Directory "$T\inst\mods" -Force | Out-Null
 $env:ATM10_INSTANCE = "$T\inst"
 $env:ATM10_MANIFEST_URL = "file:///$($T -replace '\\','/')/manifest.json"   # omit to use the live release
 "`n" | cmd /c updater\ATM10-Updater.cmd; "exit=$LASTEXITCODE"
+```
+
+On a Mac, isolate `HOME` so nothing touches the real install or LaunchAgents:
+
+```bash
+T=$(mktemp -d); mkdir -p "$T/home" "$T/inst/mods"; echo '{}' > "$T/inst/minecraftinstance.json"
+echo n | HOME="$T/home" ATM10_INSTANCE="$T/inst" bash updater/atm10-updater.sh; echo "exit=$?"
+HOME="$T/home" ATM10_INSTANCE="$T/inst" bash updater/atm10-updater.sh --background; cat "$T/home/Library/Logs/ATM10-Updater.log"
 ```
 
 Also test auto-discovery without `ATM10_INSTANCE`: point `$env:USERPROFILE` and `$env:APPDATA` at a temp folder containing `curseforge\minecraft\Instances\All the Mods 10\` with exactly one instance, then with two. PowerShell unrolls one-element arrays returned from functions; wrap such calls in `@(...)`.
