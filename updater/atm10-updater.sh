@@ -14,6 +14,7 @@ SUPPORTED_SCHEMA=1
 SUPPORT_DIR="$HOME/Library/Application Support/ATM10-Updater"
 SETTINGS_FILE="$SUPPORT_DIR/settings"
 INSTALLED_SCRIPT="$SUPPORT_DIR/atm10-updater.sh"
+LAUNCHER_APP="$SUPPORT_DIR/ATM10 Updater.app"
 LOG_FILE="$HOME/Library/Logs/ATM10-Updater.log"
 MAX_LOG_BYTES=262144
 AGENT_LABEL='com.github.petterblaasmo.atm10-updater'
@@ -268,7 +269,7 @@ update_installed_updater() {
 }
 
 auto_update_installed() {
-    [ -f "$INSTALLED_SCRIPT" ] && [ -f "$AGENT_PLIST" ] && launchctl print "gui/$(id -u)/$AGENT_LABEL" >/dev/null 2>&1
+    [ -f "$INSTALLED_SCRIPT" ] && [ -d "$LAUNCHER_APP" ] && [ -f "$AGENT_PLIST" ] && launchctl print "gui/$(id -u)/$AGENT_LABEL" >/dev/null 2>&1
 }
 
 install_script() {
@@ -283,8 +284,23 @@ install_script() {
     fi
 }
 
+# launchd runs the updater through a tiny app bundle, because macOS only lets an app (not a bare
+# bash) ask for access to ~/Documents, where CurseForge keeps instances. The try keeps a failed
+# run from showing an error dialog.
+build_launcher_app() {
+    rm -rf "$LAUNCHER_APP"
+    /usr/bin/osacompile -o "$LAUNCHER_APP" -e 'on run' -e 'try' \
+        -e "do shell script \"/bin/bash \" & quoted form of \"$INSTALLED_SCRIPT\" & \" --background\"" \
+        -e 'end try' -e 'end run' >/dev/null 2>&1 &&
+        /usr/bin/plutil -replace CFBundleIdentifier -string "$AGENT_LABEL" "$LAUNCHER_APP/Contents/Info.plist" &&
+        /usr/bin/plutil -replace CFBundleName -string 'ATM10 Updater' "$LAUNCHER_APP/Contents/Info.plist" &&
+        /usr/bin/plutil -replace LSUIElement -bool true "$LAUNCHER_APP/Contents/Info.plist" &&
+        /usr/bin/codesign --force --sign - "$LAUNCHER_APP" >/dev/null 2>&1
+}
+
 register_auto_update() {
     install_script || { note 'Automatic updates are not available in this release yet.'; return; }
+    build_launcher_app || die 'Could not set up automatic updates.'
     mkdir -p "${AGENT_PLIST%/*}" "${LOG_FILE%/*}"
     cat > "$AGENT_PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -295,9 +311,7 @@ register_auto_update() {
     <string>$AGENT_LABEL</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/bin/bash</string>
-        <string>$INSTALLED_SCRIPT</string>
-        <string>--background</string>
+        <string>$LAUNCHER_APP/Contents/MacOS/applet</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -313,6 +327,7 @@ EOF
     launchctl bootout "gui/$(id -u)/$AGENT_LABEL" >/dev/null 2>&1
     launchctl bootstrap "gui/$(id -u)" "$AGENT_PLIST" || die 'Could not turn on automatic updates.'
     done_ "Automatic updates are on: checks at login and every $CHECK_INTERVAL_MINUTES minutes, with a notification when mods change."
+    note 'If macOS asks whether "ATM10 Updater" may access your Documents folder, click Allow.'
 }
 
 initialize_auto_update() {
@@ -335,6 +350,11 @@ main() {
     step 'Finding your ATM10 instance'
     resolve_instance
     done_ "$INSTANCE"
+    # TCC (macOS privacy protection) blocks ~/Documents for background jobs until the player allows ATM10 Updater.
+    if ! ls "$INSTANCE/mods" >/dev/null 2>&1; then
+        [ $BACKGROUND = 1 ] && notify 'ATM10 updater needs access' 'Allow "ATM10 Updater" in System Settings > Privacy & Security > Files and Folders.'
+        die "macOS blocked access to $INSTANCE. Allow \"ATM10 Updater\" in System Settings > Privacy & Security > Files and Folders."
+    fi
 
     step 'Checking for server mod updates'
     load_manifest
