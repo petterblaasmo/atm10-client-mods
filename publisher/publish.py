@@ -94,7 +94,7 @@ def updater_entry(config, tag, updater_path):
     return {"url": f"https://github.com/{config['repo']}/releases/download/{tag}/{name}", "sha256": sha256}
 
 
-def build_manifest(config, tag, updater_path=None):
+def build_manifest(config, tag, updater_path=None, mac_updater_path=None):
     entries, uploads = [], []
     for jar, pattern, curseforge_slug in select_jars(Path(config["serverDir"]) / "mods", config["include"]):
         sha1, sha256 = hash_file(jar)
@@ -116,9 +116,10 @@ def build_manifest(config, tag, updater_path=None):
         "pack": config.get("pack", ""),
         "files": entries,
     }
-    updater = updater_entry(config, tag, updater_path)
-    if updater:
-        manifest["updater"] = updater
+    for key, path in (("updater", updater_path), ("macUpdater", mac_updater_path)):
+        entry = updater_entry(config, tag, path)
+        if entry:
+            manifest[key] = entry
     return manifest, uploads
 
 
@@ -132,17 +133,16 @@ def previous_manifest(repo):
 
 def same_files(a, b):
     files = lambda m: sorted((f["path"], f["sha256"]) for f in m["files"])
-    updater = lambda m: (m.get("updater") or {}).get("sha256")
-    return a is not None and files(a) == files(b) and updater(a) == updater(b)
+    updaters = lambda m: [(m.get(key) or {}).get("sha256") for key in ("updater", "macUpdater")]
+    return a is not None and files(a) == files(b) and updaters(a) == updaters(b)
 
 
-def publish(config, manifest, uploads, updater_path):
+def publish(config, manifest, uploads, updater_paths):
     with tempfile.TemporaryDirectory() as tmp:
         manifest_path = Path(tmp) / "manifest.json"
         manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         assets = [str(manifest_path), *map(str, uploads)]
-        if updater_path:
-            assets.append(updater_path)
+        assets += [path for path in updater_paths if path]
         changes = "\n".join(f"- {Path(f['path']).name}" for f in manifest["files"])
         subprocess.run(
             ["gh", "release", "create", manifest["version"], "--repo", config["repo"], "--latest",
@@ -155,13 +155,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=str(Path(__file__).with_name("client-mods.json")))
     parser.add_argument("--updater", help="ATM10-Updater.cmd to attach to the release")
+    parser.add_argument("--mac-updater", help="atm10-updater.sh to attach to the release")
     parser.add_argument("--dry-run", action="store_true", help="print the manifest without publishing")
     parser.add_argument("--force", action="store_true", help="publish even if nothing changed")
     args = parser.parse_args()
 
     config = load_config(args.config)
     tag = time.strftime("v%Y.%m.%d-%H%M%S", time.gmtime())
-    manifest, uploads = build_manifest(config, tag, args.updater)
+    manifest, uploads = build_manifest(config, tag, args.updater, args.mac_updater)
     print(json.dumps(manifest, indent=2))
     print(f"uploading {len(uploads)} own jar(s): {[u.name for u in uploads]}", file=sys.stderr)
     if args.dry_run:
@@ -171,7 +172,7 @@ def main():
     if not args.force and same_files(previous_manifest(config["repo"]), manifest):
         print("no changes since the latest release; nothing published", file=sys.stderr)
         return
-    publish(config, manifest, uploads, args.updater)
+    publish(config, manifest, uploads, [args.updater, args.mac_updater])
     print(f"published {tag}", file=sys.stderr)
 
 
